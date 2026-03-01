@@ -1498,11 +1498,9 @@ function ensureUserDataTableDb() {
 function fetchUsersFromDb() {
   ensureUserDataTableDb();
   const query = `
-    SELECT row_to_json(t)::text
-    FROM (
-      SELECT id, jsonvalue::text AS jsonvalue
-      FROM user_data
-    ) t
+    SELECT
+      id || E'\\t' || encode(convert_to(jsonvalue::text, 'UTF8'), 'base64')
+    FROM user_data
   `;
   const output = runPsql(`COPY (${query}) TO STDOUT;`, { ignoreError: true });
   const rows = [];
@@ -1510,9 +1508,13 @@ function fetchUsersFromDb() {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
-      const row = JSON.parse(trimmed);
-      const payload = row?.jsonvalue ? JSON.parse(row.jsonvalue) : {};
-      rows.push({ id: String(row.id), payload });
+      const tabIdx = trimmed.indexOf("\t");
+      if (tabIdx <= 0) continue;
+      const id = trimmed.slice(0, tabIdx);
+      const payloadBase64 = trimmed.slice(tabIdx + 1);
+      const payloadText = Buffer.from(payloadBase64, "base64").toString("utf8");
+      const payload = payloadText ? JSON.parse(payloadText) : {};
+      rows.push({ id: String(id), payload });
     } catch (error) {
       console.warn("Failed to parse DB user row:", error);
     }
