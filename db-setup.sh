@@ -281,6 +281,35 @@ create_user_data_table() {
   app_psql 'CREATE TABLE IF NOT EXISTS user_data (id TEXT PRIMARY KEY, jsonvalue JSONB NOT NULL);' >/dev/null
 }
 
+upsert_env_key() {
+  local env_file="$1"
+  local key="$2"
+  local value="$3"
+  local escaped
+
+  escaped="$(printf "%s" "$value" | sed -e 's/[\/&]/\\&/g')"
+  if [[ -f "$env_file" ]] && grep -q "^${key}=" "$env_file"; then
+    sed -i "s/^${key}=.*/${key}=${escaped}/" "$env_file"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$env_file"
+  fi
+}
+
+assign_to_env() {
+  local env_file
+  env_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env"
+
+  if [[ ! -f "$env_file" ]]; then
+    touch "$env_file"
+  fi
+
+  # Intentionally avoid overwriting DB_* used by index.js.
+  upsert_env_key "$env_file" "APP_DB_USER" "$APP_DB_USER"
+  upsert_env_key "$env_file" "APP_DB_PASSWORD" "$APP_DB_PASS"
+  upsert_env_key "$env_file" "APP_DB_NAME" "$DB_NAME"
+  log "Saved APP_DB_USER / APP_DB_PASSWORD / APP_DB_NAME to .env"
+}
+
 main() {
   prompt_os
   maybe_install_postgres
@@ -290,6 +319,7 @@ main() {
   prompt_database_name
   ensure_database_and_privileges
   create_user_data_table
+  assign_to_env
   log 'Done.'
 }
 
