@@ -3,6 +3,7 @@ const path = require("node:path");
 const http = require("node:http");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
+const { execFileSync } = require("node:child_process");
 const dotenv = require("dotenv");
 const {
   Client,
@@ -24,10 +25,16 @@ const DASHBOARD_DIR = path.join(__dirname, "dashboard");
 const DASHBOARD_PORT = Number(process.env.DASHBOARD_PORT || 3000);
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "change-me";
 const DEFAULT_BALANCE = Number(process.env.DEFAULT_BALANCE || 10000);
+const USE_JSON = parseEnvBoolean(process.env.USE_JSON, false);
+const DB_HOST = process.env.DB_HOST || "localhost";
+const DB_PORT = Number(process.env.DB_PORT || 5432);
+const DB_USER = process.env.DB_USER || "postgres";
+const DB_PASSWORD = process.env.DB_PASSWORD || "";
+const DB_NAME = process.env.DB_NAME || "postgres";
 
 const state = loadState();
 ensureStateShape();
-loadUsersFromDiskAndMergeLegacy();
+loadUsersAndMergeLegacy();
 saveState();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -1400,6 +1407,14 @@ function saveState() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(out, null, 2), "utf8");
 }
 
+function loadUsersAndMergeLegacy() {
+  if (USE_JSON) {
+    loadUsersFromDiskAndMergeLegacy();
+    return;
+  }
+  loadUsersFromDbAndMergeLegacy();
+}
+
 function loadUsersFromDiskAndMergeLegacy() {
   if (!fs.existsSync(USER_DATA_DIR)) fs.mkdirSync(USER_DATA_DIR, { recursive: true });
   const legacyUsers = state.users && typeof state.users === "object" ? state.users : {};
@@ -1423,6 +1438,102 @@ function loadUsersFromDiskAndMergeLegacy() {
     } catch (error) {
       console.warn(`Failed to load user file: ${userPath}`, error);
     }
+  }
+
+  state.users = merged;
+  for (const userId of Object.keys(state.users)) {
+    saveUser(userId);
+  }
+}
+
+function parseEnvBoolean(input, fallback = false) {
+  if (input == null) return fallback;
+  const text = String(input).trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on"].includes(text)) return true;
+  if (["0", "false", "no", "n", "off"].includes(text)) return false;
+  return fallback;
+}
+
+function toSqlTextLiteral(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function runPsql(sql, { ignoreError = false } = {}) {
+  try {
+    return execFileSync(
+      "psql",
+      [
+        "-h",
+        DB_HOST,
+        "-p",
+        String(DB_PORT),
+        "-U",
+        DB_USER,
+        "-d",
+        DB_NAME,
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-c",
+        sql,
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PGPASSWORD: DB_PASSWORD,
+        },
+      }
+    );
+  } catch (error) {
+    if (ignoreError) return "";
+    const detail = error?.stderr?.toString?.() || error?.message || String(error);
+    throw new Error(`PostgreSQL query failed: ${detail.trim()}`);
+  }
+}
+
+function ensureUserDataTableDb() {
+  runPsql("CREATE TABLE IF NOT EXISTS user_data (id TEXT PRIMARY KEY, jsonvalue JSONB NOT NULL);");
+}
+
+function fetchUsersFromDb() {
+  ensureUserDataTableDb();
+  const query = `
+    SELECT row_to_json(t)::text
+    FROM (
+      SELECT id, jsonvalue::text AS jsonvalue
+      FROM user_data
+    ) t
+  `;
+  const output = runPsql(`COPY (${query}) TO STDOUT;`, { ignoreError: true });
+  const rows = [];
+  for (const line of output.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const row = JSON.parse(trimmed);
+      const payload = row?.jsonvalue ? JSON.parse(row.jsonvalue) : {};
+      rows.push({ id: String(row.id), payload });
+    } catch (error) {
+      console.warn("Failed to parse DB user row:", error);
+    }
+  }
+  return rows;
+}
+
+function loadUsersFromDbAndMergeLegacy() {
+  const legacyUsers = state.users && typeof state.users === "object" ? state.users : {};
+  const merged = {};
+
+  for (const [userId, userData] of Object.entries(legacyUsers)) {
+    merged[userId] = normalizeUserData(userData);
+  }
+
+  const dbUsers = fetchUsersFromDb();
+  for (const row of dbUsers) {
+    const source = row.payload && typeof row.payload === "object" ? { ...row.payload } : {};
+    const sourceDivisor = normalizeMoneyUnitDivisor(source._moneyUnitDivisor);
+    delete source._moneyUnitDivisor;
+    merged[row.id] = normalizeUserData(source, sourceDivisor);
   }
 
   state.users = merged;
@@ -1483,13 +1594,23 @@ function normalizeUserData(rawUser, sourceDivisor = 1) {
 }
 
 function saveUser(userId) {
-  if (!fs.existsSync(USER_DATA_DIR)) fs.mkdirSync(USER_DATA_DIR, { recursive: true });
   const user = normalizeUserData(state.users[userId]);
   state.users[userId] = user;
   const divisor = normalizeMoneyUnitDivisor(state.settings.moneyUnitDivisor);
   const encoded = encodeUserMoney(user, divisor);
-  const userPath = path.join(USER_DATA_DIR, `${userId}.json`);
-  fs.writeFileSync(userPath, JSON.stringify(encoded, null, 2), "utf8");
+  if (USE_JSON) {
+    if (!fs.existsSync(USER_DATA_DIR)) fs.mkdirSync(USER_DATA_DIR, { recursive: true });
+    const userPath = path.join(USER_DATA_DIR, `${userId}.json`);
+    fs.writeFileSync(userPath, JSON.stringify(encoded, null, 2), "utf8");
+    return;
+  }
+  const payload = JSON.stringify(encoded);
+  const sql = `
+    INSERT INTO user_data (id, jsonvalue)
+    VALUES (${toSqlTextLiteral(userId)}, ${toSqlTextLiteral(payload)}::jsonb)
+    ON CONFLICT (id) DO UPDATE SET jsonvalue = EXCLUDED.jsonvalue;
+  `;
+  runPsql(sql);
 }
 
 function saveAllUsers() {
