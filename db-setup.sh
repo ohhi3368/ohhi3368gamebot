@@ -304,10 +304,10 @@ assign_to_env() {
   fi
 
   # Intentionally avoid overwriting DB_* used by index.js.
-  upsert_env_key "$env_file" "APP_DB_USER" "$APP_DB_USER"
-  upsert_env_key "$env_file" "APP_DB_PASSWORD" "$APP_DB_PASS"
-  upsert_env_key "$env_file" "APP_DB_NAME" "$DB_NAME"
-  log "Saved APP_DB_USER / APP_DB_PASSWORD / APP_DB_NAME to .env"
+  upsert_env_key "$env_file" "DB_USER" "$APP_DB_USER"
+  upsert_env_key "$env_file" "DB_PASSWORD" "$APP_DB_PASS"
+  upsert_env_key "$env_file" "DB_NAME" "$DB_NAME"
+  log "Saved DB_USER / DB_PASSWORD / DB_NAME to .env"
 }
 
 main() {
