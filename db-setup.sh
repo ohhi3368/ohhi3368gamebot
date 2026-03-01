@@ -233,6 +233,7 @@ ensure_role_exists() {
   else
     log "Creating user '${APP_DB_USER}'."
     admin_psql "CREATE ROLE \"$APP_DB_USER\" WITH LOGIN PASSWORD '${esc_pass}';" >/dev/null
+  admin_psql "GRANT ALL PRIVILEGES ON DATABASE \"$DB_NAME\" TO \"$APP_DB_USER\";"
   fi
 }
 
