@@ -1,0 +1,189 @@
+﻿<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stock Bot Admin</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape bg-shape-a"></div>
+    <div class="bg-shape bg-shape-b"></div>
+    <main class="page">
+      <header class="hero">
+        <div class="hero-top">
+          <h1>Stock Admin Console</h1>
+          <button id="themeToggle" class="theme-toggle">다크모드</button>
+        </div>
+        <p>Stocks, delisting, currency, tick interval, and colors</p>
+      </header>
+
+      <section class="panel tabs">
+        <button id="tabAdmin" class="tab-btn active">관리</button>
+        <button id="tabGraph" class="tab-btn">그래프</button>
+      </section>
+
+      <div id="viewAdmin" class="view-stack">
+        <section class="panel">
+          <h2>Admin Token</h2>
+          <div class="row">
+            <input id="token" placeholder="ADMIN_TOKEN" />
+            <button id="saveToken">Save Token</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Bot Settings</h2>
+          <div class="grid">
+            <label>
+              Currency symbol
+              <input id="currencySymbol" maxlength="8" placeholder="$" />
+            </label>
+            <label>
+              Price update interval (sec)
+              <input id="updateIntervalSec" type="number" min="1" />
+            </label>
+            <label>
+              Global safezone (% of base)
+              <input id="safeZonePercent" type="number" min="0" step="0.1" />
+            </label>
+            <label>
+              마지노선 (% of base)
+              <input id="redLinePercent" type="number" min="0" step="0.1" />
+            </label>
+            <label>
+              Money storage divisor
+              <input id="moneyUnitDivisor" type="number" min="0.00000001" step="0.0001" />
+            </label>
+            <label>
+              Display unit value
+              <input id="moneyDisplayUnitValue" type="number" min="1" step="1" />
+            </label>
+            <label>
+              Display unit label
+              <input id="moneyDisplayUnitLabel" maxlength="8" placeholder="만" />
+            </label>
+          </div>
+          <div class="row">
+            <button id="addMoneyUnit">단위 추가</button>
+            <div id="moneyUnitList" class="unit-list"></div>
+          </div>
+          <button id="saveSettings">Save Settings</button>
+          <div class="crash-row">
+            <button id="depressionOn" class="danger">대공황 시작</button>
+            <button id="depressionOff" class="ok">대공황 해제</button>
+            <span id="depressionState" class="crash-state">상태: 정상</span>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Add Stock</h2>
+          <div class="grid">
+            <label>
+              Name
+              <input id="stockName" placeholder="ex: Apple" />
+            </label>
+            <label>
+              Base price
+              <input id="stockBasePrice" type="number" min="0.01" step="0.01" />
+            </label>
+            <label>
+              Volatility (%)
+              <input id="stockVolatility" type="number" min="0" step="0.01" />
+            </label>
+            <label>
+              Color (#RRGGBB)
+              <input id="stockColor" type="color" value="#32a852" />
+            </label>
+          </div>
+          <button id="addStock">Add Stock</button>
+        </section>
+
+        <section class="panel">
+          <h2>Stock List</h2>
+          <div id="stockList" class="stock-list"></div>
+        </section>
+
+        <section class="panel">
+          <h2>투자 이벤트</h2>
+          <div class="grid">
+            <label>
+              이벤트 제목
+              <input id="eventTitle" placeholder="예: 비트토렌트2 오픈 투자자 모집" />
+            </label>
+            <label>
+              투자 가격
+              <input id="eventPrice" type="number" min="0.01" step="0.01" />
+            </label>
+            <label>
+              성공 배율
+              <input id="eventMultiplier" type="number" min="1" step="0.1" value="3" />
+            </label>
+          </div>
+          <button id="createEvent">이벤트 생성</button>
+          <div id="eventList" class="stock-list"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Leaderboard</h2>
+          <div class="leaderboard-wrap">
+            <table class="leaderboard-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>유저</th>
+                  <th>총자산</th>
+                  <th>현금</th>
+                  <th>주식평가금</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboardBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="viewGraph" class="view-stack hidden">
+        <section class="panel">
+          <h2>Graph Viewer</h2>
+          <div class="row">
+            <select id="graphMode">
+              <option value="all">전체</option>
+              <option value="single">개별</option>
+            </select>
+            <select id="graphStock"></select>
+            <button id="refreshGraph">새로고침</button>
+          </div>
+          <canvas id="graphCanvas" width="1200" height="520"></canvas>
+          <div id="graphLegend" class="legend"></div>
+        </section>
+      </div>
+
+      <p id="status" class="status"></p>
+    </main>
+
+    <div id="stockEditModal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <h3>주식 수정</h3>
+        <label>
+          Base price
+          <input id="editBasePrice" type="number" min="0.01" step="0.01" />
+        </label>
+        <label>
+          Current price
+          <input id="editCurrentPrice" type="number" min="0.01" step="0.01" />
+        </label>
+        <label>
+          Volatility (%)
+          <input id="editVolatility" type="number" min="0" step="0.01" />
+        </label>
+        <div class="row">
+          <button id="saveStockEdit">저장</button>
+          <button id="cancelStockEdit" class="danger">취소</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
