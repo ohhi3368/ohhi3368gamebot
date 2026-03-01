@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+癤?#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -28,29 +28,29 @@ err() {
 prompt_os() {
   printf '1. Windows\n'
   printf '2. Linux\n'
-  read -r -p '운영체제를 선택하세요 (1/2): ' choice
+  read -r -p 'Select operating system (1/2): ' choice
 
   case "$choice" in
     1) OS_CHOICE="windows" ;;
     2) OS_CHOICE="linux" ;;
     *)
-      err '잘못된 선택입니다. 1 또는 2를 입력하세요.'
+      err 'Invalid selection. Enter 1 or 2.'
       exit 1
       ;;
   esac
 }
 
 prompt_app_credentials() {
-  read -r -p 'PostgreSQL 사용자 이름을 입력하세요: ' APP_DB_USER
+  read -r -p 'Enter PostgreSQL username: ' APP_DB_USER
   if [[ -z "$APP_DB_USER" ]]; then
-    err '사용자 이름은 비워둘 수 없습니다.'
+    err 'Username cannot be empty.'
     exit 1
   fi
 
-  read -r -s -p 'PostgreSQL 비밀번호를 입력하세요: ' APP_DB_PASS
+  read -r -s -p 'Enter PostgreSQL password: ' APP_DB_PASS
   printf '\n'
   if [[ -z "$APP_DB_PASS" ]]; then
-    err '비밀번호는 비워둘 수 없습니다.'
+    err 'Password cannot be empty.'
     exit 1
   fi
 }
@@ -61,74 +61,74 @@ is_postgres_installed() {
 
 install_postgres_windows() {
   if command -v winget >/dev/null 2>&1; then
-    log 'winget으로 PostgreSQL을 설치합니다.'
+    log 'Installing PostgreSQL via winget.'
     winget install --id PostgreSQL.PostgreSQL --accept-source-agreements --accept-package-agreements
     return
   fi
 
   if command -v choco >/dev/null 2>&1; then
-    log 'choco로 PostgreSQL을 설치합니다.'
+    log 'Installing PostgreSQL via choco.'
     choco install postgresql -y
     return
   fi
 
   if command -v scoop >/dev/null 2>&1; then
-    log 'scoop으로 PostgreSQL을 설치합니다.'
+    log 'Installing PostgreSQL via scoop.'
     scoop install postgresql
     return
   fi
 
-  err 'Windows 패키지 매니저(winget/choco/scoop)를 찾지 못했습니다.'
-  err 'PostgreSQL을 수동 설치 후 스크립트를 다시 실행하세요.'
+  err 'No supported Windows package manager found (winget/choco/scoop).'
+  err 'Install PostgreSQL manually and run this script again.'
   exit 1
 }
 
 install_postgres_linux() {
   if command -v apt-get >/dev/null 2>&1; then
-    log 'apt-get으로 PostgreSQL을 설치합니다.'
+    log 'Installing PostgreSQL via apt-get.'
     sudo apt-get update
     sudo apt-get install -y postgresql postgresql-contrib
     return
   fi
 
   if command -v dnf >/dev/null 2>&1; then
-    log 'dnf로 PostgreSQL을 설치합니다.'
+    log 'Installing PostgreSQL via dnf.'
     sudo dnf install -y postgresql-server postgresql-contrib
     return
   fi
 
   if command -v yum >/dev/null 2>&1; then
-    log 'yum으로 PostgreSQL을 설치합니다.'
+    log 'Installing PostgreSQL via yum.'
     sudo yum install -y postgresql-server postgresql-contrib
     return
   fi
 
   if command -v pacman >/dev/null 2>&1; then
-    log 'pacman으로 PostgreSQL을 설치합니다.'
+    log 'Installing PostgreSQL via pacman.'
     sudo pacman -Sy --noconfirm postgresql
     return
   fi
 
   if command -v zypper >/dev/null 2>&1; then
-    log 'zypper로 PostgreSQL을 설치합니다.'
+    log 'Installing PostgreSQL via zypper.'
     sudo zypper --non-interactive install postgresql-server postgresql-contrib
     return
   fi
 
-  err '지원되는 Linux 패키지 매니저를 찾지 못했습니다.'
-  err 'PostgreSQL을 수동 설치 후 스크립트를 다시 실행하세요.'
+  err 'No supported Linux package manager found.'
+  err 'Install PostgreSQL manually and run this script again.'
   exit 1
 }
 
 maybe_install_postgres() {
   if is_postgres_installed; then
-    log 'PostgreSQL이 이미 설치되어 있습니다.'
+    log 'PostgreSQL is already installed.'
     prompt_app_credentials
     return
   fi
 
-  warn 'PostgreSQL이 설치되어 있지 않습니다.'
-  read -r -p '설치하시겠습니까? (y/n): ' install_answer
+  warn 'PostgreSQL is not installed.'
+  read -r -p 'Do you want to install it? (y/n): ' install_answer
 
   case "${install_answer,,}" in
     y|yes)
@@ -140,17 +140,17 @@ maybe_install_postgres() {
       fi
       ;;
     n|no)
-      err 'PostgreSQL 설치가 필요합니다. 스크립트를 종료합니다.'
+      err 'PostgreSQL is required. Exiting script.'
       exit 1
       ;;
     *)
-      err 'y 또는 n으로 입력하세요.'
+      err 'Please enter y or n.'
       exit 1
       ;;
   esac
 
   if ! is_postgres_installed; then
-    err '설치 이후에도 psql 명령을 찾을 수 없습니다. PATH를 확인하세요.'
+    err 'psql command is still not found after installation. Check PATH.'
     exit 1
   fi
 }
@@ -178,12 +178,12 @@ admin_psql() {
 }
 
 configure_admin_access() {
-  read -r -p '관리자(PostgreSQL superuser) 계정명 [postgres]: ' in_admin_user
+  read -r -p 'Admin (PostgreSQL superuser) username [postgres]: ' in_admin_user
   if [[ -n "$in_admin_user" ]]; then
     ADMIN_DB_USER="$in_admin_user"
   fi
 
-  read -r -s -p '관리자 비밀번호(없으면 엔터): ' ADMIN_DB_PASS
+  read -r -s -p 'Admin password (press Enter if none): ' ADMIN_DB_PASS
   printf '\n'
 
   if admin_psql 'SELECT 1;' >/dev/null 2>&1; then
@@ -193,13 +193,13 @@ configure_admin_access() {
   if [[ "$OS_CHOICE" == "linux" ]] && command -v sudo >/dev/null 2>&1; then
     ADMIN_MODE="sudo"
     if admin_psql 'SELECT 1;' >/dev/null 2>&1; then
-      log 'sudo -u postgres 방식으로 관리자 접속을 사용합니다.'
+      log 'Using admin connection via sudo -u postgres.'
       return
     fi
   fi
 
-  err '관리자 계정으로 PostgreSQL 접속에 실패했습니다.'
-  err '관리자 계정/비밀번호 또는 pg_hba.conf 설정을 확인하세요.'
+  err 'Failed to connect to PostgreSQL with admin credentials.'
+  err 'Check admin username/password or pg_hba.conf settings.'
   exit 1
 }
 
@@ -218,18 +218,18 @@ ensure_role_exists() {
   role_exists="$(admin_psql "SELECT 1 FROM pg_roles WHERE rolname='${esc_user}';" | tr -d '[:space:]')"
 
   if [[ "$role_exists" == "1" ]]; then
-    log "사용자 '${APP_DB_USER}'가 이미 존재하여 비밀번호를 갱신합니다."
+    log "User '${APP_DB_USER}' already exists. Updating password."
     admin_psql "ALTER ROLE \"$APP_DB_USER\" WITH LOGIN PASSWORD '${esc_pass}';" >/dev/null
   else
-    log "사용자 '${APP_DB_USER}'를 생성합니다."
+    log "Creating user '${APP_DB_USER}'."
     admin_psql "CREATE ROLE \"$APP_DB_USER\" WITH LOGIN PASSWORD '${esc_pass}';" >/dev/null
   fi
 }
 
 prompt_database_name() {
-  read -r -p '사용할 데이터베이스 이름을 입력하세요: ' DB_NAME
+  read -r -p 'Enter database name to use: ' DB_NAME
   if [[ -z "$DB_NAME" ]]; then
-    err '데이터베이스 이름은 비워둘 수 없습니다.'
+    err 'Database name cannot be empty.'
     exit 1
   fi
 }
@@ -244,18 +244,18 @@ ensure_database_and_privileges() {
   db_exists="$(admin_psql "SELECT 1 FROM pg_database WHERE datname='${esc_db}';" | tr -d '[:space:]')"
 
   if [[ "$db_exists" == "1" ]]; then
-    log "데이터베이스 '${DB_NAME}'가 이미 존재합니다. 권한을 확인합니다."
+    log "Database '${DB_NAME}' already exists. Checking privileges."
 
     has_connect="$(admin_psql "SELECT has_database_privilege('"$(sql_escape "$APP_DB_USER")"', '"$(sql_escape "$DB_NAME")"', 'CONNECT');" | tr -d '[:space:]')"
     has_create="$(admin_psql "SELECT has_database_privilege('"$(sql_escape "$APP_DB_USER")"', '"$(sql_escape "$DB_NAME")"', 'CREATE');" | tr -d '[:space:]')"
 
     if [[ "$has_connect" != "t" || "$has_create" != "t" ]]; then
-      warn "사용자 '${APP_DB_USER}'에게 데이터베이스 '${DB_NAME}' 권한이 충분하지 않습니다."
-      warn "필요 권한: CONNECT, CREATE"
+      warn "User '${APP_DB_USER}' does not have sufficient privileges on '${DB_NAME}'."
+      warn 'Required privileges: CONNECT, CREATE'
       exit 1
     fi
   else
-    log "데이터베이스 '${DB_NAME}'를 생성합니다."
+    log "Creating database '${DB_NAME}'."
     admin_psql "CREATE DATABASE \"$DB_NAME\" OWNER \"$APP_DB_USER\";" >/dev/null
     admin_psql "GRANT ALL PRIVILEGES ON DATABASE \"$DB_NAME\" TO \"$APP_DB_USER\";" >/dev/null
   fi
@@ -267,7 +267,7 @@ app_psql() {
 }
 
 create_user_data_table() {
-  log "데이터베이스 '${DB_NAME}'를 사용하여 user_data 테이블을 생성합니다."
+  log "Creating user_data table in database '${DB_NAME}'."
   app_psql 'CREATE TABLE IF NOT EXISTS user_data (id TEXT PRIMARY KEY, jsonvalue JSONB NOT NULL);' >/dev/null
 }
 
@@ -280,7 +280,7 @@ main() {
   prompt_database_name
   ensure_database_and_privileges
   create_user_data_table
-  log '완료'
+  log 'Done.'
 }
 
 main
