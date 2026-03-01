@@ -1412,6 +1412,7 @@ function loadUsersAndMergeLegacy() {
     loadUsersFromDiskAndMergeLegacy();
     return;
   }
+  console.log("Fetching users from DB...");
   loadUsersFromDbAndMergeLegacy();
 }
 
@@ -1463,6 +1464,9 @@ function runPsql(sql, { ignoreError = false } = {}) {
     return execFileSync(
       "psql",
       [
+        "-q",
+        "-t",
+        "-A",
         "-h",
         DB_HOST,
         "-p",
@@ -1492,29 +1496,28 @@ function runPsql(sql, { ignoreError = false } = {}) {
 }
 
 function ensureUserDataTableDb() {
-  runPsql("CREATE TABLE IF NOT EXISTS user_data (id TEXT PRIMARY KEY, jsonvalue JSONB NOT NULL);");
+  runPsql("SET client_min_messages TO warning; CREATE TABLE IF NOT EXISTS user_data (id TEXT PRIMARY KEY, jsonvalue JSONB NOT NULL);");
 }
 
 function fetchUsersFromDb() {
   ensureUserDataTableDb();
   const query = `
     SELECT
-      id || E'\\t' || encode(convert_to(jsonvalue::text, 'UTF8'), 'base64')
+      json_build_object('id', id, 'payload', jsonvalue)::text
     FROM user_data
   `;
-  const output = runPsql(`COPY (${query}) TO STDOUT;`, { ignoreError: true });
+  const output = runPsql(`COPY (${query}) TO STDOUT;`, { ignoreError: false });
   const rows = [];
   for (const line of output.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed) continue;
+    if (trimmed.startsWith("NOTICE:")) continue;
     try {
-      const tabIdx = trimmed.indexOf("\t");
-      if (tabIdx <= 0) continue;
-      const id = trimmed.slice(0, tabIdx);
-      const payloadBase64 = trimmed.slice(tabIdx + 1);
-      const payloadText = Buffer.from(payloadBase64, "base64").toString("utf8");
-      const payload = payloadText ? JSON.parse(payloadText) : {};
-      rows.push({ id: String(id), payload });
+      const parsed = JSON.parse(trimmed);
+      const id = String(parsed?.id || "");
+      if (!id) continue;
+      const payload = parsed?.payload && typeof parsed.payload === "object" ? parsed.payload : {};
+      rows.push({ id, payload });
     } catch (error) {
       console.warn("Failed to parse DB user row:", error);
     }
