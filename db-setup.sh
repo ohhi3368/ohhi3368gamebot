@@ -1,4 +1,4 @@
-ï»?#!/usr/bin/env bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -169,8 +169,8 @@ ensure_service_running_linux() {
 admin_psql() {
   local sql="$1"
 
-  if [[ "$ADMIN_MODE" == "sudo" ]]; then
-    sudo -u postgres psql -d postgres -tAc "$sql"
+  if [[ "$ADMIN_MODE" == "sudo_i" ]]; then
+    sudo -i -u postgres psql -d postgres -tAc "$sql"
     return
   fi
 
@@ -178,6 +178,16 @@ admin_psql() {
 }
 
 configure_admin_access() {
+  if [[ "$OS_CHOICE" == "linux" ]] && command -v sudo >/dev/null 2>&1; then
+    ADMIN_MODE="sudo_i"
+    if admin_psql 'SELECT 1;' >/dev/null 2>&1; then
+      log 'Using admin connection via sudo -i -u postgres.'
+      return
+    fi
+    warn 'sudo -i -u postgres connection failed. Falling back to direct admin login.'
+    ADMIN_MODE="direct"
+  fi
+
   read -r -p 'Admin (PostgreSQL superuser) username [postgres]: ' in_admin_user
   if [[ -n "$in_admin_user" ]]; then
     ADMIN_DB_USER="$in_admin_user"
@@ -191,9 +201,9 @@ configure_admin_access() {
   fi
 
   if [[ "$OS_CHOICE" == "linux" ]] && command -v sudo >/dev/null 2>&1; then
-    ADMIN_MODE="sudo"
+    ADMIN_MODE="sudo_i"
     if admin_psql 'SELECT 1;' >/dev/null 2>&1; then
-      log 'Using admin connection via sudo -u postgres.'
+      log 'Using admin connection via sudo -i -u postgres.'
       return
     fi
   fi
